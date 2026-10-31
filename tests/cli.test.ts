@@ -95,7 +95,7 @@ describe("eval command", () => {
     c = makeIo();
     expect(await runCli(["eval", "--bogus"], c.io)).toBe(2);
     c = makeIo();
-    expect(await runCli(["eval", "--model", "claude"], c.io)).toBe(2);
+    expect(await runCli(["eval", "--model", "llama"], c.io)).toBe(2);
     expect(c.errText()).toContain("--model must be mock, gemini or openai");
   });
 
