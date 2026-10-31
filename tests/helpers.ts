@@ -54,6 +54,16 @@ export function makeRegistry() {
       },
     }),
     defineTool({
+      name: "free",
+      description: "Accepts any object",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "object" },
+      execute: (input: unknown) => {
+        executed.push({ name: "free", input });
+        return {};
+      },
+    }),
+    defineTool({
       name: "slow",
       description: "Takes a while",
       inputSchema: { type: "object", properties: {} },
