@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+.mutation-tmp/
+trace*.jsonl
+*.log
+.DS_Store
