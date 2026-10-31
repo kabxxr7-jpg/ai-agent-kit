@@ -36,6 +36,8 @@ describe("matchesSubset", () => {
   it("matches partial objects, exact arrays and primitives", () => {
     expect(matchesSubset({ a: 1 }, { a: 1, b: 2 })).toBe(true);
     expect(matchesSubset({ a: 2 }, { a: 1 })).toBe(false);
+    expect(matchesSubset({ a: 1, b: 2 }, { a: 1, b: 3 })).toBe(false); // every key must match, not just one
+    expect(matchesSubset({ a: 1, b: 2 }, { a: 1 })).toBe(false);
     expect(matchesSubset({ a: { b: 1 } }, { a: { b: 1, c: 2 } })).toBe(true);
     expect(matchesSubset([1, 2], [1, 2])).toBe(true);
     expect(matchesSubset([1], [1, 2])).toBe(false);

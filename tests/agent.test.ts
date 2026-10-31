@@ -194,6 +194,34 @@ describe("timeout", () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it("stops a run that never yields to the event loop, where the timer alone could not fire", async () => {
+    // Every await below resolves from the microtask queue, so setTimeout callbacks starve; only
+    // the clock check at the top of each step can end this run.
+    const { registry } = makeRegistry();
+    let n = 0;
+    const forever = {
+      name: "forever",
+      generate: async (messages: { length: number }[]) => {
+        // The cap only exists so that a broken clock check fails this test instead of hanging it.
+        if (++n > 500) throw new Error("runaway: the deadline was never noticed");
+        const until = performance.now() + 1; // burn 1 ms without yielding to timers
+        while (performance.now() < until);
+        return calls(call("free", { n: messages.length }));
+      },
+    };
+    const t0 = performance.now();
+    const r = await runAgent({
+      model: forever as never,
+      tools: registry,
+      allowedTools: ["free"],
+      input: "go",
+      limits: { timeoutMs: 30, maxSteps: 1_000_000, maxTotalTokens: Infinity },
+    });
+    expect(r.stopReason).toBe("timeout");
+    expect(performance.now() - t0).toBeLessThan(2000);
+    expect(r.steps).toBeGreaterThan(1);
+  });
+
   it("does not leave the timer running after a normal finish", async () => {
     const { registry } = makeRegistry();
     const r = await runAgent({ model: createMockModel([say("ok")]), tools: registry, allowedTools: [], input: "go", limits: { timeoutMs: 60_000 } });
