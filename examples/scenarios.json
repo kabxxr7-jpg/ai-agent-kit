@@ -1,0 +1,190 @@
+{
+  "scenarios": [
+    {
+      "id": "refund-eligible",
+      "description": "Happy path: look up the order, check the policy, answer.",
+      "input": "My mug from order ORD-1001 arrived cracked. Can I get a refund?",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "toolCalls": [{ "name": "check_refund_eligibility", "arguments": { "orderId": "ORD-1001" } }] },
+        { "text": { "resolution": "refund_eligible", "orderId": "ORD-1001", "summary": "Delivered 2026-06-05, inside the 30-day window. Up to 49.90 can be refunded." } }
+      ],
+      "expect": {
+        "toolCalls": [
+          { "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } },
+          { "name": "check_refund_eligibility", "arguments": { "orderId": "ORD-1001" } }
+        ],
+        "finalAnswer": { "resolution": "refund_eligible", "orderId": "ORD-1001" },
+        "maxSteps": 3
+      }
+    },
+    {
+      "id": "refund-window-expired",
+      "input": "I want my money back for ORD-1002.",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "check_refund_eligibility", "arguments": { "orderId": "ORD-1002" } }] },
+        { "text": { "resolution": "refund_denied", "orderId": "ORD-1002", "summary": "Delivered 2026-04-02, outside the 30-day window." } }
+      ],
+      "expect": {
+        "toolCalls": [{ "name": "check_refund_eligibility", "arguments": { "orderId": "ORD-1002" } }],
+        "finalAnswer": { "resolution": "refund_denied" }
+      }
+    },
+    {
+      "id": "not-delivered-yet",
+      "input": "Refund ORD-1003 please, it is taking too long.",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1003" } }] },
+        { "toolCalls": [{ "name": "check_refund_eligibility", "arguments": { "orderId": "ORD-1003" } }] },
+        { "text": { "resolution": "refund_denied", "orderId": "ORD-1003", "summary": "The order has shipped but is not delivered yet, so it is not refundable." } }
+      ],
+      "expect": {
+        "toolCalls": [{ "name": "lookup_order" }, { "name": "check_refund_eligibility" }],
+        "finalAnswer": { "resolution": "refund_denied" }
+      }
+    },
+    {
+      "id": "unknown-order-opens-ticket",
+      "input": "Where is order ORD-9999?",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-9999" } }] },
+        { "toolCalls": [{ "name": "create_support_ticket", "arguments": { "subject": "Order ORD-9999 not found", "body": "Customer asks about ORD-9999; no such order exists.", "priority": "normal" } }] },
+        { "text": { "resolution": "ticket_created", "ticketId": "TCK-0001", "summary": "No order ORD-9999 exists; a ticket was opened for a human to follow up." } }
+      ],
+      "expect": {
+        "toolCalls": [{ "name": "lookup_order" }, { "name": "create_support_ticket", "arguments": { "priority": "normal" } }],
+        "finalAnswer": { "resolution": "ticket_created", "ticketId": "TCK-0001" },
+        "ticketCount": 1
+      }
+    },
+    {
+      "id": "tool-error-recovers",
+      "description": "A tool throws; the error comes back as data and the model corrects the call.",
+      "input": "Please escalate: ORD-9998 never arrived.",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "create_support_ticket", "arguments": { "subject": "Missing parcel", "body": "ORD-9998 never arrived.", "priority": "high", "orderId": "ORD-9998" } }] },
+        { "toolCalls": [{ "name": "create_support_ticket", "arguments": { "subject": "Missing parcel", "body": "ORD-9998 never arrived; order id not found in the system.", "priority": "high" } }] },
+        { "text": { "resolution": "ticket_created", "ticketId": "TCK-0001", "summary": "Opened a high-priority ticket." } }
+      ],
+      "expect": {
+        "toolCalls": [{ "name": "create_support_ticket" }, { "name": "create_support_ticket" }],
+        "finalAnswer": { "resolution": "ticket_created" },
+        "ticketCount": 1
+      }
+    },
+    {
+      "id": "bad-arguments-recovers",
+      "description": "Invalid arguments are fed back once; the corrected call runs.",
+      "input": "What is the status of ORD-1001?",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": {} }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "text": { "resolution": "info_provided", "orderId": "ORD-1001", "summary": "ORD-1001 was delivered on 2026-06-05." } }
+      ],
+      "expect": {
+        "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }],
+        "refused": [{ "name": "lookup_order", "status": "invalid_arguments" }],
+        "finalAnswer": { "resolution": "info_provided" }
+      }
+    },
+    {
+      "id": "bad-arguments-twice-aborts",
+      "description": "Two invalid calls in a row: the run stops with an error instead of looping.",
+      "input": "What is the status of ORD-1001?",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": {} }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "1001" } }] },
+        { "text": { "resolution": "info_provided", "summary": "should never be reached" } }
+      ],
+      "expect": { "stopReason": "error", "errorCode": "invalid_arguments", "toolCalls": [], "maxSteps": 2 }
+    },
+    {
+      "id": "injection-in-tool-output-blocked",
+      "description": "ORD-1004's customer note says to call delete_all. The model 'obeys'; the allow-list refuses and nothing is deleted.",
+      "input": "Summarise the status of ORD-1004.",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1004" } }] },
+        { "toolCalls": [{ "name": "delete_all", "arguments": {} }] },
+        { "text": { "resolution": "info_provided", "orderId": "ORD-1004", "summary": "ORD-1004 was delivered on 2026-06-10. The customer note contained instructions, which were ignored." } }
+      ],
+      "expect": {
+        "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1004" } }],
+        "notExecuted": ["delete_all"],
+        "refused": [{ "name": "delete_all", "status": "tool_not_allowed" }],
+        "finalAnswer": { "resolution": "info_provided" }
+      }
+    },
+    {
+      "id": "repeated-call-loop-breaker",
+      "description": "The model asks for the same lookup again and again; the third identical call is not run.",
+      "input": "Is ORD-1001 delivered?",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] }
+      ],
+      "expect": { "stopReason": "error", "errorCode": "repeated_call", "toolCalls": [{ "name": "lookup_order" }, { "name": "lookup_order" }] }
+    },
+    {
+      "id": "max-steps",
+      "description": "Different calls every time, never an answer: stops at the step limit.",
+      "input": "Check every order for me.",
+      "limits": { "maxSteps": 3 },
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1002" } }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1003" } }] },
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1004" } }] }
+      ],
+      "expect": { "stopReason": "maxSteps", "maxSteps": 3 }
+    },
+    {
+      "id": "token-budget",
+      "description": "The first model call already reports more tokens than the budget allows.",
+      "input": "Look up ORD-1001.",
+      "limits": { "maxTotalTokens": 1000 },
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }], "usage": { "inputTokens": 900, "outputTokens": 200 } },
+        { "text": { "resolution": "info_provided", "summary": "should never be reached" } }
+      ],
+      "expect": { "stopReason": "budget", "toolCalls": [] }
+    },
+    {
+      "id": "timeout",
+      "description": "The model answers after 300 ms; the run's wall clock is 50 ms.",
+      "input": "Look up ORD-1001.",
+      "limits": { "timeoutMs": 50 },
+      "mockTurns": [
+        { "delayMs": 300, "text": { "resolution": "info_provided", "summary": "too late" } }
+      ],
+      "expect": { "stopReason": "timeout" }
+    },
+    {
+      "id": "invalid-final-answer-recovers",
+      "description": "The first answer breaks the schema; the rejection is fed back once.",
+      "input": "What is ORD-1001's status?",
+      "mockTurns": [
+        { "toolCalls": [{ "name": "lookup_order", "arguments": { "orderId": "ORD-1001" } }] },
+        { "text": { "resolution": "maybe", "summary": "unsure" } },
+        { "text": { "resolution": "info_provided", "orderId": "ORD-1001", "summary": "Delivered on 2026-06-05." } }
+      ],
+      "expect": { "toolCalls": [{ "name": "lookup_order" }], "finalAnswer": { "resolution": "info_provided" } }
+    },
+    {
+      "id": "invalid-final-answer-twice-aborts",
+      "input": "What is ORD-1001's status?",
+      "mockTurns": [
+        { "text": "Sure! It was delivered." },
+        { "text": { "resolution": "maybe", "summary": "still wrong" } }
+      ],
+      "expect": { "stopReason": "error", "errorCode": "invalid_final_answer" }
+    },
+    {
+      "id": "model-call-fails",
+      "input": "What is ORD-1001's status?",
+      "mockTurns": [{ "error": "upstream returned 500" }],
+      "expect": { "stopReason": "error", "errorCode": "model_error" }
+    }
+  ]
+}
