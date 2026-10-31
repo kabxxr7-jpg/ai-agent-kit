@@ -53,7 +53,7 @@ Without the key the command prints `SKIPPED: --model gemini needs GEMINI_API_KEY
 ### Using the loop in your own code
 
 ```ts
-import { runAgent, ToolRegistry, defineTool, createGeminiModel } from "./src/index.js";
+import { runAgent, ToolRegistry, defineTool, createGeminiModel } from "./src/index.ts";   // run with tsx
 
 const registry = new ToolRegistry([
   defineTool({
@@ -61,7 +61,7 @@ const registry = new ToolRegistry([
     description: "Current weather for a city",
     inputSchema: { type: "object", properties: { city: { type: "string", minLength: 1 } }, required: ["city"], additionalProperties: false },
     outputSchema: { type: "object", properties: { tempC: { type: "number" } }, required: ["tempC"] },
-    execute: async ({ city }) => ({ tempC: await lookup(city) }),
+    execute: async ({ city }) => ({ tempC: city === "Oslo" ? 4 : 20 }),   // stand-in for a real lookup
   }),
 ]);
 
@@ -184,7 +184,7 @@ The first run killed 23 of 25. The two survivors showed real gaps: no test prove
 - **Demo data is fictional and in memory.** One process, no auth, no persistence. The refund policy (delivered, within 30 days, not already refunded) is invented.
 - **Traces are written unredacted.** Not production logging.
 - **Mutation check scope:** 25 hand-picked breakages, not an exhaustive tool. A 100% kill rate here means the tests notice those 25 changes, not that the suite catches every bug. Some mutants are killed only by the broader scenario and CLI tests rather than a focused unit test. No equivalent-mutant analysis was needed because none survived.
-- **Environment:** Node v25.2.1 on macOS only. The CI workflow is written but has not run (nothing has been pushed).
+- **Environment:** Node v25.2.1 on macOS only. CI runs `npm ci`, typecheck and the tests on GitHub Actions (Node 25); the two live-API tests are skipped there.
 - **Not used in production or by any client.**
 
 ## Layout
